@@ -1,6 +1,8 @@
 streamlit>=1.28.0
 crewai>=0.14.0
 crewai-tools>=0.0.16
+chromadb>=0.4.22
+pysqlite3-binary>=0.5.2
 langchain-community>=0.0.10
 langchain-groq>=0.0.1
 google-generativeai>=0.3.0
