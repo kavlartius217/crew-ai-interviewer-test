@@ -140,14 +140,16 @@ def main():
             st.session_state.chain = setup_langchain(st.session_state.questions)
     
     if st.session_state.interview_started and not st.session_state.interview_completed:
-        for question in st.session_state.questions:
+        for i, question in enumerate(st.session_state.questions):
             st.write(question)
-            audio_bytes = mic_recorder()
+            audio_bytes = mic_recorder(key=f"mic_recorder_{i}")  # Fixed: Unique key for each instance
+            
             if audio_bytes:
                 transcribed_text = transcribe_audio(audio_bytes)
                 st.session_state.message_history.append({"user": transcribed_text})
                 response = st.session_state.chain.invoke({"question_set": st.session_state.questions, "answer": transcribed_text})
                 st.session_state.message_history.append({"ai": response.content})
+                
                 if response.content.strip().lower() == "thank you":
                     st.session_state.interview_completed = True
                     break
@@ -162,5 +164,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
