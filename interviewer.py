@@ -32,8 +32,7 @@ class MessageHistory:
     def show_history(self):
         return self.l1
 
-# Cache initialization functions
-@st.cache_resource
+# Initialize LLM without caching
 def initialize_llm():
     return ChatGroq(
         api_key=st.secrets['GROQ_API_KEY'],
@@ -41,10 +40,10 @@ def initialize_llm():
         temperature=0
     )
 
-@st.cache_resource
-def initialize_agents_and_tools(jd_file, resume_file):
-    jd_tool = TXTSearchTool(jd_file)
-    resume_tool = PDFSearchTool(resume_file)
+# Initialize tools and agents without caching
+def initialize_agents_and_tools():
+    jd_tool = TXTSearchTool("Job_Description.md")
+    resume_tool = PDFSearchTool("Resume.pdf")
     
     interviewer_agent = Agent(
         role="Expert Interviewer",
@@ -56,57 +55,37 @@ def initialize_agents_and_tools(jd_file, resume_file):
     )
     return jd_tool, resume_tool, interviewer_agent
 
+# Cache only the file content
 @st.cache_data
-def save_files(job_description_file, resume_file):
+def save_files(job_description_content, resume_content):
     with open("Job_Description.md", "wb") as f:
-        f.write(job_description_file.getbuffer())
+        f.write(job_description_content)
     with open("Resume.pdf", "wb") as f:
-        f.write(resume_file.getbuffer())
-
-@st.cache_data
-def generate_interview_questions(crew):
-    return crew.kickoff({})
-
-@st.cache_data
-def perform_analysis(history_data, jd_tool, resume_tool):
-    analysis_agent = Agent(
-        role="Talent Acquisition Expert",
-        goal="Evaluate candidate fit",
-        backstory="You are an expert in talent acquisition",
-        tools=[jd_tool, resume_tool],
-        memory=True,
-        verbose=False
-    )
-    
-    analysis_task = Task(
-        description="Analyze the interview script and evaluate candidate's suitability",
-        agent=analysis_agent,
-        output_file="analysis.md"
-    )
-    
-    crew2 = Crew(
-        agents=[analysis_agent],
-        tasks=[analysis_task],
-        memory=True
-    )
-    
-    return crew2.kickoff({"interview_script": history_data})
+        f.write(resume_content)
 
 # File uploaders in sidebar
 st.sidebar.header("Upload Files")
 job_description_file = st.sidebar.file_uploader("Upload Job Description (MD)", type="md")
 resume_file = st.sidebar.file_uploader("Upload Resume (PDF)", type="pdf")
 
-# Initialize session state for history
+# Initialize session state for history and other variables
 if 'history' not in st.session_state:
     st.session_state.history = MessageHistory()
+if 'llm' not in st.session_state:
+    st.session_state.llm = initialize_llm()
 
 if job_description_file and resume_file:
     # Save uploaded files
-    save_files(job_description_file, resume_file)
+    save_files(job_description_file.getbuffer(), resume_file.getbuffer())
     
     # Initialize tools and agents
-    jd_tool, resume_tool, interviewer_agent = initialize_agents_and_tools("Job_Description.md", "Resume.pdf")
+    if 'agents' not in st.session_state:
+        jd_tool, resume_tool, interviewer_agent = initialize_agents_and_tools()
+        st.session_state.agents = {
+            'jd_tool': jd_tool,
+            'resume_tool': resume_tool,
+            'interviewer_agent': interviewer_agent
+        }
     
     # Create interview task
     interview_task = Task(
@@ -115,7 +94,7 @@ if job_description_file and resume_file:
             "Formulate 10-12 well-structured questions evaluating skills, experience, and role alignment. "
             "Include technical, situational, and behavioral questions."
         ),
-        agent=interviewer_agent,
+        agent=st.session_state.agents['interviewer_agent'],
         expected_output="A structured file containing the questions only.",
         output_file='interview.md',
     )
@@ -124,18 +103,15 @@ if job_description_file and resume_file:
     if 'questions' not in st.session_state:
         with st.spinner('Generating interview questions...'):
             crew1 = Crew(
-                agents=[interviewer_agent],
+                agents=[st.session_state.agents['interviewer_agent']],
                 tasks=[interview_task],
                 memory=True
             )
-            st.session_state.questions = generate_interview_questions(crew1)
+            st.session_state.questions = crew1.kickoff({})
     
     # Display generated questions
     st.header("Generated Interview Questions")
     st.write(st.session_state.questions)
-    
-    # Initialize Langchain for interview
-    llm = initialize_llm()
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are an Interviewer"),
@@ -149,7 +125,7 @@ if job_description_file and resume_file:
         ("user", "{answer}")
     ])
     
-    chain = prompt | llm
+    chain = prompt | st.session_state.llm
     
     def interview_chain(answer):
         ai_response = chain.invoke({
@@ -167,16 +143,37 @@ if job_description_file and resume_file:
         with st.spinner('Processing your response...'):
             ai_response = interview_chain(user_input)
             st.write(ai_response)
-            gc.collect()  # Clean up memory
+            gc.collect()
     
     # Analysis section
     l1 = st.session_state.history.show_history()
     if l1 and len(l1) > 0 and l1[-1]['role'] == 'assistant' and l1[-1]['content'] == 'Thank You':
         st.header("Candidate Analysis")
         with st.spinner('Analyzing interview responses...'):
-            analysis_result = perform_analysis(l1, jd_tool, resume_tool)
+            analysis_agent = Agent(
+                role="Talent Acquisition Expert",
+                goal="Evaluate candidate fit",
+                backstory="You are an expert in talent acquisition",
+                tools=[st.session_state.agents['jd_tool'], st.session_state.agents['resume_tool']],
+                memory=True,
+                verbose=False
+            )
+            
+            analysis_task = Task(
+                description="Analyze the interview script and evaluate candidate's suitability",
+                agent=analysis_agent,
+                output_file="analysis.md"
+            )
+            
+            crew2 = Crew(
+                agents=[analysis_agent],
+                tasks=[analysis_task],
+                memory=True
+            )
+            
+            analysis_result = crew2.kickoff({"interview_script": l1})
             st.write(analysis_result)
-            gc.collect()  # Clean up memory
+            gc.collect()
 
 else:
     st.warning("Please upload both the job description and resume to proceed.")
