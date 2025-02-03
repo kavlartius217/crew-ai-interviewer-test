@@ -78,6 +78,7 @@ def create_interviewer_agent(jd_tool, resume_tool):
     return Agent(
         role="Expert Interviewer",
         goal="Conduct a structured interview by asking relevant questions.",
+        backstory="An experienced AI-driven interviewer designed to assess candidates based on job descriptions and resumes.",
         tools=[jd_tool, resume_tool],
         memory=True,
         verbose=True
@@ -94,6 +95,7 @@ def create_analysis_agent(jd_tool, resume_tool):
     return Agent(
         role="Talent Acquisition Expert",
         goal="Evaluate the candidate based on interview responses.",
+        backstory="A seasoned recruitment specialist responsible for assessing candidates' suitability based on interview performance and resume analysis.",
         tools=[jd_tool, resume_tool],
         memory=True,
         verbose=True
@@ -154,4 +156,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
