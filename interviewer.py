@@ -40,8 +40,6 @@ def initialize_llm():
         temperature=0
     )
 
-# Initialize tools and agents without caching
-def initialize_agents_and_tools():
     jd_tool = TXTSearchTool("Job_Description.md")
     resume_tool = PDFSearchTool("Resume.pdf")
     
@@ -52,8 +50,6 @@ def initialize_agents_and_tools():
         tools=[jd_tool, resume_tool],
         memory=True,
         verbose=False
-    )
-    return jd_tool, resume_tool, interviewer_agent
 
 # Cache only the file content
 
