@@ -165,18 +165,20 @@ def main():
                 audio_bytes = mic_recorder(key=f"mic_recorder_{st.session_state.question_index}")  # Unique key
 
                 if audio_bytes:
-                    transcribed_text = transcribe_audio(audio_bytes)
-                    st.session_state.message_history.append({"user": transcribed_text})
-                    response = st.session_state.chain.invoke({
-                        "question_set": st.session_state.questions,
-                        "chat_history": st.session_state.message_history
-                    })
-                    st.session_state.message_history.append({"ai": response.content})
+    transcribed_text = transcribe_audio(audio_bytes)
+    st.session_state.message_history.append({"user": transcribed_text})
 
-                    st.session_state.question_index += 1  # Move to next question
+    # Ensure input is a proper string, not a dictionary
+    formatted_prompt = f"Question: {current_question}\nAnswer: {transcribed_text}"
 
-                    if response.content.strip().lower() == "thank you":
-                        st.session_state.interview_completed = True
+    response = st.session_state.chain.invoke(formatted_prompt)  # Fixed input type
+    st.session_state.message_history.append({"ai": response.content})
+
+    st.session_state.question_index += 1  # Move to next question
+
+    if response.content.strip().lower() == "thank you":
+        st.session_state.interview_completed = True
+
         else:
             st.session_state.interview_completed = True
 
@@ -189,5 +191,4 @@ def main():
         st.write(report)
 
 if __name__ == "__main__":
-    
     main()
