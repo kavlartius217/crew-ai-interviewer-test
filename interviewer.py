@@ -29,6 +29,7 @@ st.title("AI Interviewer System")
 # Sidebar for API keys and file uploads
 with st.sidebar:
     st.header("Configuration")
+    groq_key = st.text_input("Enter Groq API Key", type="password")
     openai_key = st.text_input("Enter OpenAI API Key", type="password")
     gemini_key = st.text_input("Enter Gemini API Key", type="password")
     
@@ -36,9 +37,11 @@ with st.sidebar:
     jd_file = st.file_uploader("Upload Job Description (TXT)", type="txt")
     resume_file = st.file_uploader("Upload Resume (PDF)", type="pdf")
 
-# Set OpenAI API Key
+# Set OpenAI and Groq API keys
 if openai_key:
     openai.api_key = openai_key
+if groq_key:
+    os.environ["GROQ_API_KEY"] = groq_key
 
 def text_to_speech(text):
     tts = gTTS(text=text, lang='en')
@@ -119,7 +122,7 @@ def create_analysis_task(agent):
 def setup_langchain(questions):
     return ChatGroq(
         model_name="gemma2-9b-it",
-        api_key=openai.api_key,  # Use OpenAI API key
+        api_key=groq_key,  # Use Groq API key here
         prompt=ChatPromptTemplate.from_messages([ 
             ("system", "You are an Interviewer."),
             ("system", "You have a set of questions: {question_set}. Ask them sequentially, one at a time."),
@@ -134,7 +137,7 @@ def setup_langchain(questions):
     )
 
 def main():
-    if all([openai_key, gemini_key, jd_file, resume_file]):
+    if all([groq_key, openai_key, gemini_key, jd_file, resume_file]):
         jd_tool, resume_tool = initialize_tools()
         if jd_tool and resume_tool:
             if not st.session_state.interview_started and st.button("Start Interview"):
