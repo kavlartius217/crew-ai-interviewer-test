@@ -80,8 +80,8 @@ def initialize_tools():
 def create_interviewer_agent(jd_tool, resume_tool):
     return Agent(
         role="Expert Interviewer",
-        goal="Conduct a structured interview and assess the candidate",
-        backstory="An AI interviewer skilled in job assessments.",
+        goal="Conduct a structured interview by asking relevant questions based on the job description and the candidate's resume.",
+        backstory="You are an experienced interviewer skilled in assessing candidates based on job requirements and their qualifications.",
         tools=[jd_tool, resume_tool],
         memory=True,
         verbose=True,
@@ -90,16 +90,16 @@ def create_interviewer_agent(jd_tool, resume_tool):
 
 def create_interview_task(agent):
     return Task(
-        description="Ask structured interview questions based on job description and resume.",
+        description="Analyze the job description and resume to generate structured interview questions.",
         agent=agent,
-        expected_output="List of structured interview questions."
+        expected_output="A structured file containing the questions only."
     )
 
 def create_analysis_agent(jd_tool, resume_tool):
     return Agent(
-        role="Interview Evaluator",
-        goal="Analyze the interview and assess candidate fitness.",
-        backstory="An expert hiring manager AI.",
+        role="Talent Acquisition Expert",
+        goal="Evaluate the candidate's fit for the job based on the job description, resume, and interview script analysis.",
+        backstory="An expert in talent acquisition specializing in evaluating candidates based on job descriptions and interview performance.",
         tools=[jd_tool, resume_tool],
         memory=True,
         verbose=True,
@@ -108,9 +108,9 @@ def create_analysis_agent(jd_tool, resume_tool):
 
 def create_analysis_task(agent):
     return Task(
-        description="Analyze interview responses and generate a candidate fit report.",
+        description="Analyze interview responses and generate a detailed candidate fit report.",
         agent=agent,
-        expected_output="Candidate suitability report."
+        expected_output="A detailed report assessing the candidate's suitability for the role."
     )
 
 def setup_langchain(questions):
@@ -118,9 +118,10 @@ def setup_langchain(questions):
         model_name="mixtral",
         api_key=groq_key,
         prompt=ChatPromptTemplate.from_messages([
-            ("system", "You are an AI interviewer."),
+            ("system", "You are an Interviewer."),
+            ("system", "Ask only the next unanswered question from {question_set} sequentially."),
             MessagesPlaceholder(variable_name="chat_history"),
-            ("user", "Question: {question_set}. User's Answer: {answer}")
+            ("user", "{answer}")
         ])
     )
 
@@ -136,27 +137,6 @@ def main():
                 questions = crew1.kickoff({})
                 st.session_state.questions = questions
                 st.session_state.chain = setup_langchain(questions)
-                response = st.session_state.chain.invoke({"question_set": questions, "answer": "", "chat_history": st.session_state.message_history})
-                st.session_state.message_history.append({'role': 'assistant', 'content': response.content})
-
-            if st.session_state.interview_started:
-                for i, message in enumerate(st.session_state.message_history):
-                    if message['role'] == 'assistant':
-                        st.write("Interviewer:", message['content'])
-                        if i == len(st.session_state.message_history) - 1:
-                            play_audio(message['content'])
-                    else:
-                        st.write("You:", message['content'])
-
-                if st.session_state.message_history and "Thank You" in st.session_state.message_history[-1]['content']:
-                    if not st.session_state.interview_completed:
-                        st.session_state.interview_completed = True
-                        analysis_agent = create_analysis_agent(jd_tool, resume_tool)
-                        analysis_task = create_analysis_task(analysis_agent)
-                        crew2 = Crew(agents=[analysis_agent], tasks=[analysis_task], memory=True)
-                        analysis = crew2.kickoff({"interview_script": st.session_state.message_history})
-                        st.markdown("### Interview Analysis")
-                        st.write(analysis)
 
 if __name__ == "__main__":
     main()
