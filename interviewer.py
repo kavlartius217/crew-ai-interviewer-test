@@ -1,3 +1,7 @@
+# Import the SQLite fix first
+from utils import fix_sqlite
+
+# Rest of your imports
 import streamlit as st
 import os
 from crewai import Agent, Task, Crew
@@ -8,6 +12,8 @@ import google.generativeai as genai
 from gtts import gTTS
 import tempfile
 import time
+
+# Rest of your code remains the same...
 
 # Initialize session state
 if 'message_history' not in st.session_state:
