@@ -67,10 +67,6 @@ if 'history' not in st.session_state:
     st.session_state.history = MessageHistory()
 if 'llm' not in st.session_state:
     st.session_state.llm = initialize_llm()
-
-if job_description_file and resume_file:
-    # Save uploaded files
-    save_files(job_description_file.getbuffer(), resume_file.getbuffer())
     
     # Initialize tools and agents
     if 'agents' not in st.session_state:
