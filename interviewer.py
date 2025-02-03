@@ -39,9 +39,11 @@ with st.sidebar:
 
 # Set OpenAI and Groq API keys
 if openai_key:
-    openai.api_key = openai_key
+    os.environ["OPENAI_API_KEY"] = openai_key
 if groq_key:
     os.environ["GROQ_API_KEY"] = groq_key
+if gemini_key:
+    os.environ['GEMINI_API_KEY']=gemini_key
 
 def text_to_speech(text):
     tts = gTTS(text=text, lang='en')
