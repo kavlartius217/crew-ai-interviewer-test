@@ -77,6 +77,19 @@ def transcribe_audio(audio_file):
 
 # [Previous functions remain the same: initialize_tools(), create_interviewer_agent(), 
 # create_interview_task(), create_analysis_agent(), create_analysis_task(), setup_langchain()]
+def initialize_tools():
+    """Initialize tools for searching job description and resume."""
+    if jd_file and resume_file:
+        jd_path = save_uploaded_file(jd_file, "uploads")
+        resume_path = save_uploaded_file(resume_file, "uploads")
+
+        jd_tool = TXTSearchTool(file_path=jd_path)  # Assuming this is the correct tool
+        resume_tool = PDFSearchTool(file_path=resume_path)  # Assuming this is the correct tool
+
+        return jd_tool, resume_tool
+    else:
+        st.warning("Please upload both the job description and resume files.")
+        return None, None
 
 def main():
     if all([openai_key, groq_key, gemini_key, jd_file, resume_file]):
