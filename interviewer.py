@@ -1,194 +1,148 @@
 __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-import os
 import streamlit as st
-import tempfile
-import subprocess
-import time
-
-# Install streamlit_mic_recorder if not installed
-try:
-    from streamlit_mic_recorder import mic_recorder
-except ModuleNotFoundError:
-    subprocess.run(["pip", "install", "streamlit-mic-recorder"], check=True)
-    from streamlit_mic_recorder import mic_recorder
-
 from crewai import Agent, Task, Crew
 from crewai_tools import TXTSearchTool, PDFSearchTool
 from langchain_groq import ChatGroq
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-import google.generativeai as genai
+from langchain.prompts import ChatPromptTemplate
+from langchain.prompts import MessagesPlaceholder
+import os
 
-# Suppress regex warnings
-import warnings
-warnings.filterwarnings("ignore", category=SyntaxWarning)
+# Set up the environment
+os.environ['OPENAI_API_KEY'] = st.secrets['OPENAI_API_KEY']
 
-# Initialize session state
-if 'message_history' not in st.session_state:
-    st.session_state.message_history = []
-if 'interview_started' not in st.session_state:
-    st.session_state.interview_started = False
-if 'question_index' not in st.session_state:
-    st.session_state.question_index = 0
-if 'questions' not in st.session_state:
-    st.session_state.questions = []
-if 'interview_completed' not in st.session_state:
-    st.session_state.interview_completed = False
+# Streamlit app title
+st.title("Crew AI Interviewer")
 
-# Page configuration
-st.set_page_config(page_title="AI Interviewer", layout="wide")
-st.title("AI Interviewer System")
+# File uploaders
+st.sidebar.header("Upload Files")
+job_description_file = st.sidebar.file_uploader("Upload Job Description (MD)", type="md")
+resume_file = st.sidebar.file_uploader("Upload Resume (PDF)", type="pdf")
 
-# Sidebar for API keys and file uploads
-with st.sidebar:
-    st.header("Configuration")
-    groq_key = st.text_input("Enter Groq API Key", type="password")
-    gemini_key = st.text_input("Enter Gemini API Key", type="password")
-    openai_key = st.text_input("Enter OpenAI API Key", type="password")
-    
-    os.environ["GROQ_API_KEY"] = groq_key
-    os.environ["GEMINI_API_KEY"] = gemini_key
-    os.environ["OPENAI_API_KEY"] = openai_key
-    
-    st.header("Upload Files")
-    jd_file = st.file_uploader("Upload Job Description (TXT)", type="txt")
-    resume_file = st.file_uploader("Upload Resume (PDF)", type="pdf")
+if job_description_file and resume_file:
+    # Save uploaded files
+    with open("Job_Description.md", "wb") as f:
+        f.write(job_description_file.getbuffer())
+    with open("Resume.pdf", "wb") as f:
+        f.write(resume_file.getbuffer())
 
-def save_uploaded_file(uploaded_file, directory):
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    file_path = os.path.join(directory, uploaded_file.name)
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    return file_path
+    # Initialize tools
+    jd_tool = TXTSearchTool('Job_Description.md')
+    resume_tool = PDFSearchTool('Resume.pdf')
 
-def transcribe_audio(audio_data):
-    """Transcribes recorded audio using Google Gemini."""
-    if isinstance(audio_data, dict) and "bytes" in audio_data:
-        audio_bytes = audio_data["bytes"]
-    else:
-        raise ValueError("Invalid audio format received.")
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        temp_audio.write(audio_bytes)
-        temp_audio_path = temp_audio.name
-
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    result = model.generate_content([temp_audio_path, "transcribe the audio as it is"])
-    
-    return result.text
-
-def create_interviewer_agent(jd_tool, resume_tool):
-    """Creates the AI Interviewer agent."""
-    return Agent(
+    # Initialize Interviewer Agent
+    Interviewer_agent = Agent(
         role="Expert Interviewer",
-        goal="Conduct a structured interview by asking relevant questions.",
-        backstory="An experienced AI-driven interviewer designed to assess candidates based on job descriptions and resumes.",
+        goal="Conduct a structured interview by asking relevant questions based on the job description and the candidate's resume.",
+        backstory="You are an experienced interviewer skilled in assessing candidates based on job requirements and their qualifications.",
         tools=[jd_tool, resume_tool],
         memory=True,
         verbose=True
     )
 
-def create_interview_task(agent):
-    """Creates the interview task for generating questions."""
-    return Task(
-        description="Generate structured interview questions.",
-        agent=agent,
-        expected_output="A structured list of interview questions."
-    )
-
-def create_analysis_agent(jd_tool, resume_tool):
-    """Creates the AI Analysis agent for evaluation."""
-    return Agent(
-        role="Talent Acquisition Expert",
-        goal="Evaluate the candidate based on interview responses.",
-        backstory="A seasoned recruitment specialist responsible for assessing candidates' suitability based on interview performance and resume analysis.",
+    # Initialize Interview Task
+    interview_task = Task(
+        description=(
+            "Analyze the job description using jd_tool and the candidate's resume using resume_tool. "
+            "Formulate a total of 10-12 well-structured questions that evaluate the candidate's skills, experience, and alignment with the role. "
+            "Ensure a mix of technical, situational, and behavioral questions. "
+        ),
+        agent=Interviewer_agent,
+        expected_output="A structured file containing the questions only.",
         tools=[jd_tool, resume_tool],
-        memory=True,
-        verbose=True
+        output_file='interview.md',
     )
 
-def create_analysis_task(agent):
-    """Creates the analysis task for candidate evaluation."""
-    return Task(
-        description="Analyze responses and generate a report on candidate suitability.",
-        agent=agent,
-        expected_output="A detailed candidate assessment report."
+    # Run the first crew
+    crew1 = Crew(
+        agents=[Interviewer_agent],
+        tasks=[interview_task],
+        memory=True
     )
 
-def setup_langchain():
-    """Sets up LangChain RAG model for sequential questioning."""
-    return ChatGroq(
-        model_name="gemma2-9b-it",
-        api_key=os.environ["GROQ_API_KEY"],
-        prompt=ChatPromptTemplate.from_messages([
-            ("system", "You are an Interviewer."),
-            ("system", "You have a set of questions: {question_set}. Ask them sequentially, one at a time."),
-            ("system", "Only ask the next unanswered question from {question_set}."),
-            ("system", "Do not repeat any question already present in chat history."),
-            ("system", "Ask only the question itself, without any additional text."),
-            ("system", "Never answer the questions yourself."),
-            ("system", "After questions are over, say 'Thank You'."),
-            MessagesPlaceholder(variable_name="chat_history"),
-        ])
-    )
+    result = crew1.kickoff({})
 
-def main():
-    """Main function to run the AI Interviewer System."""
-    if all([groq_key, gemini_key, openai_key, jd_file, resume_file]):
-        jd_path = save_uploaded_file(jd_file, "uploads")
-        resume_path = save_uploaded_file(resume_file, "uploads")
-        jd_tool = TXTSearchTool(jd_path)
-        resume_tool = PDFSearchTool(resume_path)
+    # Display the generated questions
+    st.header("Generated Interview Questions")
+    st.write(result)
 
-        if not st.session_state.interview_started and st.button("Start Interview"):
-            st.session_state.interview_started = True
-            interviewer_agent = create_interviewer_agent(jd_tool, resume_tool)
-            interview_task = create_interview_task(interviewer_agent)
-            crew1 = Crew(agents=[interviewer_agent], tasks=[interview_task], memory=True)
+    # Initialize Langchain for interview
+    llm = ChatGroq(api_key=st.secrets['GROQ_API_KEY'], model="gemma2-9b-it", temperature=0)
 
-            # Get full question list without stripping content
-            result = crew1.kickoff({})
-            st.session_state.questions = result.raw.split("\n")  # Preserve full structure
+    class MessageHistory:
+        def __init__(self):
+            self.l1 = []  # Initialize as an empty list
 
-            st.session_state.chain = setup_langchain()
+        def add(self, user_message, ai_response):
+            self.l1.append({'role': 'user', 'content': user_message})
+            self.l1.append({'role': 'assistant', 'content': ai_response})
 
-    if st.session_state.interview_started and not st.session_state.interview_completed:
-        if st.session_state.question_index < len(st.session_state.questions):
-            current_question = st.session_state.questions[st.session_state.question_index].strip()
-            
-            if current_question:
-                st.write(f"**Question {st.session_state.question_index + 1}: {current_question}**")
+        def show_history(self):
+            return self.l1
 
-                audio_bytes = mic_recorder(key=f"mic_recorder_{st.session_state.question_index}")  # Unique key
+    history = MessageHistory()
 
-                if audio_bytes:
-                    transcribed_text = transcribe_audio(audio_bytes)
-                    st.session_state.message_history.append({"user": transcribed_text})
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are an Interviewer"),
+        ("system", "You have a set of questions: {question_set}. Ask them sequentially, one at a time."),
+        ("system", "Only ask the next unanswered question from {question_set}."),
+        ("system", "Do not repeat any question already present in chat history."),
+        ("system", "Ask only the question itself, without any additional text."),
+        ("system", "Never answer the questions yourself"),
+        ("system", "After questions are over say Thank You"),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("user", "{answer}")
+    ])
 
-                    # Ensure input is a proper string, not a dictionary
-                    formatted_prompt = f"Question: {current_question}\nAnswer: {transcribed_text}"
+    chain = prompt | llm
 
-                    response = st.session_state.chain.invoke(formatted_prompt)  # Fixed input type
-                    st.session_state.message_history.append({"ai": response.content})
+    def interview_chain(answer):
+        ai_response = chain.invoke({"question_set": result, "answer": answer, "chat_history": history.l1})
+        history.add(answer, ai_response.content)
+        return ai_response.content
 
-                    st.session_state.question_index += 1  # Move to next question
+    # Streamlit interface for interview
+    st.header("Interview Session")
+    user_input = st.text_input("Your Answer:")
+    if st.button("Submit"):
+        ai_response = interview_chain(user_input)
+        st.write(ai_response)
 
-                    if response.content.strip().lower() == "thank you":
-                        st.session_state.interview_completed = True
+    # Analysis Crew
+    if "Thank You" in history.show_history()[-1]['content']:
+        st.header("Candidate Analysis")
+        Interview_analysis_agent = Agent(
+            role="Talent Acquisition Expert",
+            goal="Evaluate the candidate's fit for the job based on the job description, resume, and interview script analysis.",
+            backstory=(
+                "You are an expert in talent acquisition, specializing in evaluating candidates based on "
+                "their resumes, job descriptions, and interview performance. "
+                "Using your analytical skills, you determine whether a candidate aligns with the job requirements."
+            ),
+            tools=[jd_tool, resume_tool],
+            memory=True,
+            verbose=True
+        )
 
-        else:
-            st.session_state.interview_completed = True
+        Interview_analysis_task = Task(
+            description=(
+                "Analyze the interview script provided in {interview_script} to assess the candidate's fit for the role. "
+                "Use the job description from the jd_tool and the candidate's resume from the resume_tool to make an informed evaluation."
+            ),
+            expected_output="A detailed report assessing the candidate's suitability for the role based on the job description, resume, and interview performance.",
+            agent=Interview_analysis_agent,
+            output_file="candidate_fit_analysis.md"
+        )
 
-    if st.session_state.interview_completed:
-        analysis_agent = create_analysis_agent(jd_tool, resume_tool)
-        analysis_task = create_analysis_task(analysis_agent)
-        crew2 = Crew(agents=[analysis_agent], tasks=[analysis_task], memory=True)
-        report = crew2.kickoff({"interview_script": st.session_state.message_history})
-        st.write("### Candidate Assessment Report")
-        st.write(report)
+        crew2 = Crew(
+            agents=[Interview_analysis_agent],
+            tasks=[Interview_analysis_task],
+            memory=True
+        )
 
-if __name__ == "__main__":
-    main()
+        analysis_result = crew2.kickoff({"interview_script": history.show_history()})
+        st.write(analysis_result)
+
+else:
+    st.warning("Please upload both the job description and resume to proceed.")
