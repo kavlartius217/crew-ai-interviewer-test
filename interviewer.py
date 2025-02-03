@@ -128,7 +128,7 @@ def setup_langchain(questions):
     ("system", "After questions are over say Thank You"),
     MessagesPlaceholder(variable_name="chat_history"),
     ("user", "{answer}")
-    )
+        ]))
 
 def main():
     if all([groq_key, gemini_key, openai_key, jd_file, resume_file]):
