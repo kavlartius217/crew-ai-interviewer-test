@@ -6,7 +6,6 @@ import streamlit as st
 import tempfile
 import subprocess
 import time
-import re
 
 # Install streamlit_mic_recorder if not installed
 try:
@@ -21,7 +20,7 @@ from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 import google.generativeai as genai
 
-# Suppress regex warnings from pysbd
+# Suppress regex warnings
 import warnings
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 
@@ -150,30 +149,34 @@ def main():
             interview_task = create_interview_task(interviewer_agent)
             crew1 = Crew(agents=[interviewer_agent], tasks=[interview_task], memory=True)
 
+            # Get full question list without stripping content
             result = crew1.kickoff({})
-            st.session_state.questions = re.findall(r"\d+\.\s(.+)", result.raw)  # Extract questions
+            st.session_state.questions = result.raw.split("\n")  # Preserve full structure
+
             st.session_state.chain = setup_langchain()
 
     if st.session_state.interview_started and not st.session_state.interview_completed:
         if st.session_state.question_index < len(st.session_state.questions):
-            current_question = st.session_state.questions[st.session_state.question_index]
-            st.write(f"**Question {st.session_state.question_index + 1}:** {current_question}")
+            current_question = st.session_state.questions[st.session_state.question_index].strip()
+            
+            if current_question:
+                st.write(f"**Question {st.session_state.question_index + 1}: {current_question}**")
 
-            audio_bytes = mic_recorder(key=f"mic_recorder_{st.session_state.question_index}")  # Unique key
+                audio_bytes = mic_recorder(key=f"mic_recorder_{st.session_state.question_index}")  # Unique key
 
-            if audio_bytes:
-                transcribed_text = transcribe_audio(audio_bytes)
-                st.session_state.message_history.append({"user": transcribed_text})
-                response = st.session_state.chain.invoke({
-                    "question_set": st.session_state.questions,
-                    "chat_history": st.session_state.message_history
-                })
-                st.session_state.message_history.append({"ai": response.content})
+                if audio_bytes:
+                    transcribed_text = transcribe_audio(audio_bytes)
+                    st.session_state.message_history.append({"user": transcribed_text})
+                    response = st.session_state.chain.invoke({
+                        "question_set": st.session_state.questions,
+                        "chat_history": st.session_state.message_history
+                    })
+                    st.session_state.message_history.append({"ai": response.content})
 
-                st.session_state.question_index += 1  # Move to next question
+                    st.session_state.question_index += 1  # Move to next question
 
-                if response.content.strip().lower() == "thank you":
-                    st.session_state.interview_completed = True
+                    if response.content.strip().lower() == "thank you":
+                        st.session_state.interview_completed = True
         else:
             st.session_state.interview_completed = True
 
