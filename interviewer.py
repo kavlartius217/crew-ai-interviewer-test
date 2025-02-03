@@ -56,12 +56,6 @@ def initialize_agents_and_tools():
     return jd_tool, resume_tool, interviewer_agent
 
 # Cache only the file content
-@st.cache_data
-def save_files(job_description_content, resume_content):
-    with open("Job_Description.md", "wb") as f:
-        f.write(job_description_content)
-    with open("Resume.pdf", "wb") as f:
-        f.write(resume_content)
 
 # File uploaders in sidebar
 st.sidebar.header("Upload Files")
