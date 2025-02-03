@@ -62,9 +62,8 @@ def transcribe_audio(audio_file):
     if audio_file:
         audio_path = save_uploaded_file(audio_file, "uploads")
         genai.configure(api_key=gemini_key)
-        audio_data = genai.upload_file(audio_path)
         model = genai.GenerativeModel("gemini-1.5-flash")
-        result = model.generate_content([audio_data, "transcribe the audio as it is"])
+        result = model.generate_content([audio_path, "transcribe the audio as it is"])
         return result.text
     return None
 
@@ -85,7 +84,7 @@ def create_interviewer_agent(jd_tool, resume_tool):
         tools=[jd_tool, resume_tool],
         memory=True,
         verbose=True,
-        llm=ChatGroq(model_name="mixtral", api_key=groq_key)
+        llm=ChatGroq(model_name="gemma2-9b-it", api_key=groq_key)
     )
 
 def create_interview_task(agent):
@@ -103,7 +102,7 @@ def create_analysis_agent(jd_tool, resume_tool):
         tools=[jd_tool, resume_tool],
         memory=True,
         verbose=True,
-        llm=ChatGroq(model_name="mixtral", api_key=groq_key)
+        llm=ChatGroq(model_name="gemma2-9b-it", api_key=groq_key)
     )
 
 def create_analysis_task(agent):
@@ -115,11 +114,16 @@ def create_analysis_task(agent):
 
 def setup_langchain(questions):
     return ChatGroq(
-        model_name="mixtral",
+        model_name="gemma2-9b-it",
         api_key=groq_key,
         prompt=ChatPromptTemplate.from_messages([
             ("system", "You are an Interviewer."),
-            ("system", "Ask only the next unanswered question from {question_set} sequentially."),
+            ("system", "You have a set of questions: {question_set}. Ask them sequentially, one at a time."),
+            ("system", "Only ask the next unanswered question from {question_set}."),
+            ("system", "Do not repeat any question already present in chat history."),
+            ("system", "Ask only the question itself, without any additional text."),
+            ("system", "Never answer the questions yourself"),
+            ("system", "After questions are over say Thank You"),
             MessagesPlaceholder(variable_name="chat_history"),
             ("user", "{answer}")
         ])
