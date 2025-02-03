@@ -118,10 +118,16 @@ def setup_langchain(questions):
     return ChatGroq(
         model_name="gemma2-9b-it",
         api_key=os.environ["GROQ_API_KEY"],
-        prompt=ChatPromptTemplate.from_messages([
-            ("system", "You are an Interviewer."),
-            ("system", "Ask the next unanswered question from {question_set}.")
-        ])
+        prompt = ChatPromptTemplate.from_messages([
+    ("system","You are an Interviewer"),
+    ("system", "You have a set of questions: {question_set}. Ask them sequentially, one at a time."),
+    ("system", "Only ask the next unanswered question from {question_set}."),
+    ("system", "Do not repeat any question already present in chat history."),
+    ("system", "Ask only the question itself, without any additional text."),
+    ("system", "Never answer the questions yourself"),
+    ("system", "After questions are over say Thank You"),
+    MessagesPlaceholder(variable_name="chat_history"),
+    ("user", "{answer}")
     )
 
 def main():
