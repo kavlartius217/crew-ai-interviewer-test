@@ -4,9 +4,9 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import os
 import streamlit as st
 import tempfile
+import subprocess
 import time
 import re
-import subprocess
 
 # Install streamlit_mic_recorder if not installed
 try:
@@ -30,10 +30,10 @@ if 'message_history' not in st.session_state:
     st.session_state.message_history = []
 if 'interview_started' not in st.session_state:
     st.session_state.interview_started = False
+if 'question_index' not in st.session_state:
+    st.session_state.question_index = 0
 if 'questions' not in st.session_state:
     st.session_state.questions = []
-if 'chain' not in st.session_state:
-    st.session_state.chain = None
 if 'interview_completed' not in st.session_state:
     st.session_state.interview_completed = False
 
@@ -65,6 +65,7 @@ def save_uploaded_file(uploaded_file, directory):
     return file_path
 
 def transcribe_audio(audio_data):
+    """Transcribes recorded audio using Google Gemini."""
     if isinstance(audio_data, dict) and "bytes" in audio_data:
         audio_bytes = audio_data["bytes"]
     else:
@@ -81,15 +82,7 @@ def transcribe_audio(audio_data):
     return result.text
 
 def create_interviewer_agent(jd_tool, resume_tool):
-    return Agent(
-        role="Expert Interviewer",
-        goal="Conduct a structured interview by asking relevant questions.",
-        backstory="An experienced AI-driven interviewer designed to assess candidates based on job descriptions and resumes.",
-        tools=[jd_tool, resume_tool],
-        memory=True,
-        verbose=True
-    )
-def create_interviewer_agent(jd_tool, resume_tool):
+    """Creates the AI Interviewer agent."""
     return Agent(
         role="Expert Interviewer",
         goal="Conduct a structured interview by asking relevant questions.",
@@ -100,13 +93,34 @@ def create_interviewer_agent(jd_tool, resume_tool):
     )
 
 def create_interview_task(agent):
+    """Creates the interview task for generating questions."""
     return Task(
         description="Generate structured interview questions.",
         agent=agent,
         expected_output="A structured list of interview questions."
     )
 
+def create_analysis_agent(jd_tool, resume_tool):
+    """Creates the AI Analysis agent for evaluation."""
+    return Agent(
+        role="Talent Acquisition Expert",
+        goal="Evaluate the candidate based on interview responses.",
+        backstory="A seasoned recruitment specialist responsible for assessing candidates' suitability based on interview performance and resume analysis.",
+        tools=[jd_tool, resume_tool],
+        memory=True,
+        verbose=True
+    )
+
+def create_analysis_task(agent):
+    """Creates the analysis task for candidate evaluation."""
+    return Task(
+        description="Analyze responses and generate a report on candidate suitability.",
+        agent=agent,
+        expected_output="A detailed candidate assessment report."
+    )
+
 def setup_langchain():
+    """Sets up LangChain RAG model for sequential questioning."""
     return ChatGroq(
         model_name="gemma2-9b-it",
         api_key=os.environ["GROQ_API_KEY"],
@@ -123,6 +137,7 @@ def setup_langchain():
     )
 
 def main():
+    """Main function to run the AI Interviewer System."""
     if all([groq_key, gemini_key, openai_key, jd_file, resume_file]):
         jd_path = save_uploaded_file(jd_file, "uploads")
         resume_path = save_uploaded_file(resume_file, "uploads")
@@ -134,20 +149,17 @@ def main():
             interviewer_agent = create_interviewer_agent(jd_tool, resume_tool)
             interview_task = create_interview_task(interviewer_agent)
             crew1 = Crew(agents=[interviewer_agent], tasks=[interview_task], memory=True)
-            
-            # Extract structured questions from the agent
-            result = crew1.kickoff({})
-            if isinstance(result, list):
-                st.session_state.questions = [q.strip() for q in result if q.strip()]
-            else:
-                st.session_state.questions = re.findall(r"\d+\.\s(.+)", result.raw)
 
+            result = crew1.kickoff({})
+            st.session_state.questions = re.findall(r"\d+\.\s(.+)", result.raw)  # Extract questions
             st.session_state.chain = setup_langchain()
 
     if st.session_state.interview_started and not st.session_state.interview_completed:
-        for i, question in enumerate(st.session_state.questions):
-            st.write(question)
-            audio_bytes = mic_recorder(key=f"mic_recorder_{i}")
+        if st.session_state.question_index < len(st.session_state.questions):
+            current_question = st.session_state.questions[st.session_state.question_index]
+            st.write(f"**Question {st.session_state.question_index + 1}:** {current_question}")
+
+            audio_bytes = mic_recorder(key=f"mic_recorder_{st.session_state.question_index}")  # Unique key
 
             if audio_bytes:
                 transcribed_text = transcribe_audio(audio_bytes)
@@ -158,9 +170,12 @@ def main():
                 })
                 st.session_state.message_history.append({"ai": response.content})
 
+                st.session_state.question_index += 1  # Move to next question
+
                 if response.content.strip().lower() == "thank you":
                     st.session_state.interview_completed = True
-                    break
+        else:
+            st.session_state.interview_completed = True
 
     if st.session_state.interview_completed:
         analysis_agent = create_analysis_agent(jd_tool, resume_tool)
@@ -169,7 +184,6 @@ def main():
         report = crew2.kickoff({"interview_script": st.session_state.message_history})
         st.write("### Candidate Assessment Report")
         st.write(report)
-
 
 if __name__ == "__main__":
     main()
