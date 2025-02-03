@@ -13,3 +13,4 @@ numpy
 pillow
 requests
 PyPDF2
+pysqlite3-binary
