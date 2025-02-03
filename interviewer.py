@@ -5,12 +5,25 @@ import os
 import streamlit as st
 import tempfile
 import time
-from streamlit_mic_recorder import mic_recorder
+import re
+import subprocess
+
+# Install streamlit_mic_recorder if not installed
+try:
+    from streamlit_mic_recorder import mic_recorder
+except ModuleNotFoundError:
+    subprocess.run(["pip", "install", "streamlit-mic-recorder"], check=True)
+    from streamlit_mic_recorder import mic_recorder
+
 from crewai import Agent, Task, Crew
 from crewai_tools import TXTSearchTool, PDFSearchTool
 from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 import google.generativeai as genai
+
+# Suppress regex warnings from pysbd
+import warnings
+warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 # Initialize session state
 if 'message_history' not in st.session_state:
@@ -141,5 +154,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
