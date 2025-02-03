@@ -1,5 +1,5 @@
 # Import the SQLite fix first
-from utils import fix_sqlite
+
 
 # Rest of your imports
 import streamlit as st
