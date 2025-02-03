@@ -7,10 +7,13 @@ import time
 import tempfile
 from crewai import Agent, Task, Crew
 from crewai_tools import TXTSearchTool, PDFSearchTool
-from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 import google.generativeai as genai
 from gtts import gTTS
+import openai  # Import OpenAI module for GPT-4
+
+# Set environment variable for OpenAI API Key
+openai.api_key = st.secrets["OPENAI_API_KEY"]  # Assuming your OpenAI key is stored in Streamlit secrets
 
 # Initialize session state
 if 'message_history' not in st.session_state:
@@ -29,7 +32,7 @@ st.title("AI Interviewer System")
 # Sidebar for API keys and file uploads
 with st.sidebar:
     st.header("Configuration")
-    groq_key = st.text_input("Enter Groq API Key", type="password")
+    openai_key = st.text_input("Enter OpenAI API Key", type="password")
     gemini_key = st.text_input("Enter Gemini API Key", type="password")
     
     st.header("Upload Files")
@@ -84,7 +87,7 @@ def create_interviewer_agent(jd_tool, resume_tool):
         tools=[jd_tool, resume_tool],
         memory=True,
         verbose=True,
-        llm=ChatGroq(model_name="gemma2-9b-it", api_key=groq_key)
+        llm="openai"  # Use OpenAI GPT-4 model
     )
 
 def create_interview_task(agent):
@@ -102,7 +105,7 @@ def create_analysis_agent(jd_tool, resume_tool):
         tools=[jd_tool, resume_tool],
         memory=True,
         verbose=True,
-        llm=ChatGroq(model_name="gemma2-9b-it", api_key=groq_key)
+        llm="openai"  # Use OpenAI GPT-4 model
     )
 
 def create_analysis_task(agent):
@@ -115,8 +118,8 @@ def create_analysis_task(agent):
 def setup_langchain(questions):
     return ChatGroq(
         model_name="gemma2-9b-it",
-        api_key=groq_key,
-        prompt=ChatPromptTemplate.from_messages([
+        api_key=openai.api_key,  # Use OpenAI API key
+        prompt=ChatPromptTemplate.from_messages([ 
             ("system", "You are an Interviewer."),
             ("system", "You have a set of questions: {question_set}. Ask them sequentially, one at a time."),
             ("system", "Only ask the next unanswered question from {question_set}."),
@@ -130,7 +133,7 @@ def setup_langchain(questions):
     )
 
 def main():
-    if all([groq_key, gemini_key, jd_file, resume_file]):
+    if all([openai_key, gemini_key, jd_file, resume_file]):
         jd_tool, resume_tool = initialize_tools()
         if jd_tool and resume_tool:
             if not st.session_state.interview_started and st.button("Start Interview"):
