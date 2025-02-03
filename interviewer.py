@@ -111,7 +111,7 @@ if job_description_file and resume_file:
 
     # Analysis Crew
     l1=history.show_history()
-    if "Thank You" in l1[-1]:
+    if l1[-1]=='Thank You':
         st.header("Candidate Analysis")
         Interview_analysis_agent = Agent(
             role="Talent Acquisition Expert",
