@@ -64,14 +64,20 @@ def save_uploaded_file(uploaded_file, directory):
         f.write(uploaded_file.getbuffer())
     return file_path
 
-def transcribe_audio(audio_bytes):
+def transcribe_audio(audio_data):
+    if isinstance(audio_data, dict) and "bytes" in audio_data:
+        audio_bytes = audio_data["bytes"]
+    else:
+        raise ValueError("Invalid audio format received.")
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(audio_bytes)
         temp_audio_path = temp_audio.name
-    
+
     genai.configure(api_key=os.environ["GEMINI_API_KEY"])
     model = genai.GenerativeModel("gemini-1.5-flash")
     result = model.generate_content([temp_audio_path, "transcribe the audio as it is"])
+    
     return result.text
 
 def create_interviewer_agent(jd_tool, resume_tool):
