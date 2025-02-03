@@ -1,7 +1,4 @@
-# Import the SQLite fix first
-
-
-# Rest of your imports
+import pysqlite3 as sqlite3
 import streamlit as st
 import os
 from crewai import Agent, Task, Crew
