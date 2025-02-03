@@ -12,9 +12,6 @@ import google.generativeai as genai
 from gtts import gTTS
 import openai  # Import OpenAI module for GPT-4
 
-# Set environment variable for OpenAI API Key
-openai.api_key = st.secrets["OPENAI_API_KEY"]  # Assuming your OpenAI key is stored in Streamlit secrets
-
 # Initialize session state
 if 'message_history' not in st.session_state:
     st.session_state.message_history = []
@@ -38,6 +35,10 @@ with st.sidebar:
     st.header("Upload Files")
     jd_file = st.file_uploader("Upload Job Description (TXT)", type="txt")
     resume_file = st.file_uploader("Upload Resume (PDF)", type="pdf")
+
+# Set OpenAI API Key
+if openai_key:
+    openai.api_key = openai_key
 
 def text_to_speech(text):
     tts = gTTS(text=text, lang='en')
@@ -147,4 +148,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
